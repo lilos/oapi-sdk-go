@@ -235,10 +235,16 @@ func (r *Request) url() string {
 	if r.QueryParams != "" {
 		path = fmt.Sprintf("%s?%s", path, r.QueryParams)
 	}
+	if strings.Contains(r.HttpPath, "approval") {
+		path = fmt.Sprintf("/%s", r.HttpPath)
+	}
 	return path
 }
 
 func (r *Request) FullUrl(domain string) string {
+	if strings.Contains(r.HttpPath, "approval") {
+		return fmt.Sprintf("%s%s", "https://www.feishu.cn", r.url())
+	}
 	return fmt.Sprintf("%s%s", domain, r.url())
 }
 
