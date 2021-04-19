@@ -15,19 +15,19 @@ type UserService struct {
 }
 
 type Instance struct {
-	ApprovalCode    string         `json:"approval_code,omitempty"`
-	ApprovalName    string         `json:"approval_name,omitempty"`
-	StartTime       int            `json:"start_time,omitempty"`
-	EndTime         int            `json:"end_time,omitempty"`
-	UserId          string         `json:"user_id,omitempty"`
-	OpenId          string         `json:"open_id,omitempty"`
-	DepartmentId    string         `json:"department_id,omitempty"`
-	Status          string         `json:"status,omitempty"`
+	ApprovalCode string `json:"approval_code,omitempty"`
+	ApprovalName string `json:"approval_name,omitempty"`
+	StartTime    int    `json:"start_time,omitempty"`
+	EndTime      int    `json:"end_time,omitempty"`
+	UserId       string `json:"user_id,omitempty"`
+	OpenId       string `json:"open_id,omitempty"`
+	DepartmentId string `json:"department_id,omitempty"`
+	Status       string `json:"status,omitempty"`
 	//Form            []*Form        `json:"form,omitempty"`
 	//TaskList        []*TaskList    `json:"task_list,omitempty"`
 	//CommentList     []*CommentList `json:"comment_list,omitempty"`
 	//Timeline        []*Timeline    `json:"timeline,omitempty"`
-	ForceSendFields []string       `json:"-"`
+	ForceSendFields []string `json:"-"`
 }
 
 func (s *Instance) MarshalJSON() ([]byte, error) {
@@ -64,6 +64,17 @@ type TaskEventData struct {
 
 func (s *TaskEventData) MarshalJSON() ([]byte, error) {
 	type cp TaskEventData
+	raw := cp(*s)
+	return tools.MarshalJSON(raw, s.ForceSendFields)
+}
+
+type SubscriptionSubscribeReqBody struct {
+	ApprovalCode    string   `json:"approval_code,omitempty"`
+	ForceSendFields []string `json:"-"`
+}
+
+func (s *SubscriptionSubscribeReqBody) MarshalJSON() ([]byte, error) {
+	type cp SubscriptionSubscribeReqBody
 	raw := cp(*s)
 	return tools.MarshalJSON(raw, s.ForceSendFields)
 }
