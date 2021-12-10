@@ -123,8 +123,9 @@ func (s *I18nNames) MarshalJSON() ([]byte, error) {
 
 type MentionEvent struct {
 	Key             string   `json:"key,omitempty"`
-	Id              string   `json:"id,omitempty"`
+	Id              *UserId  `json:"id,omitempty"`
 	Name            string   `json:"name,omitempty"`
+	TenantKey       string   `json:"tenant_key,omitempty"`
 	ForceSendFields []string `json:"-"`
 }
 
