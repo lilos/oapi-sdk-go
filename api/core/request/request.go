@@ -266,9 +266,9 @@ func (r *Request) Url() string {
 
 func (r *Request) FullUrl(domain string) string {
 	if strings.Contains(r.HttpPath, "approval") {
-		return fmt.Sprintf("%s%s", "https://www.feishu.cn", r.url())
+		return fmt.Sprintf("%s%s", "https://www.feishu.cn", r.Url())
 	}
-	return fmt.Sprintf("%s%s", domain, r.url())
+	return fmt.Sprintf("%s%s", domain, r.Url())
 }
 
 func (r *Request) DataFilled() bool {
