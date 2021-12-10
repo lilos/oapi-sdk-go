@@ -8,9 +8,9 @@ import (
 	"github.com/larksuite/oapi-sdk-go/core/config"
 	"github.com/larksuite/oapi-sdk-go/core/constants"
 	"github.com/larksuite/oapi-sdk-go/core/errors"
-	coremodel "github.com/larksuite/oapi-sdk-go/core/model"
 	"github.com/larksuite/oapi-sdk-go/core/tools"
 	"github.com/larksuite/oapi-sdk-go/event/core/model"
+
 	"net/http"
 )
 
@@ -115,19 +115,17 @@ func complementFunc(ctx *core.Context, httpEvent *model.HTTPEvent) {
 	conf := config.ByCtx(ctx)
 	err := httpEvent.Err
 	if err != nil {
-		switch e := err.(type) {
-		case *NotFoundHandlerErr:
-			conf.GetLogger().Info(ctx, e.Error())
-			httpEvent.Response.Write(http.StatusOK, constants.DefaultContentType, fmt.Sprintf(coremodel.ResponseFormat, err.Error()))
+		if _, ok := err.(*NotFoundHandlerErr); ok {
+			httpEvent.Response.Write(http.StatusOK, constants.DefaultContentType, fmt.Sprintf(core.ResponseFormat, err.Error()))
 			return
 		}
-		httpEvent.Response.Write(http.StatusInternalServerError, constants.DefaultContentType, fmt.Sprintf(coremodel.ResponseFormat, err.Error()))
+		httpEvent.Response.Write(http.StatusInternalServerError, constants.DefaultContentType, fmt.Sprintf(core.ResponseFormat, err.Error()))
 		conf.GetLogger().Error(ctx, err.Error())
 		return
 	}
 	if constants.CallbackType(httpEvent.Type) == constants.CallbackTypeChallenge {
-		httpEvent.Response.Write(http.StatusOK, constants.DefaultContentType, fmt.Sprintf(coremodel.ChallengeResponseFormat, httpEvent.Challenge))
+		httpEvent.Response.Write(http.StatusOK, constants.DefaultContentType, fmt.Sprintf(core.ChallengeResponseFormat, httpEvent.Challenge))
 		return
 	}
-	httpEvent.Response.Write(http.StatusOK, constants.DefaultContentType, fmt.Sprintf(coremodel.ResponseFormat, "successed"))
+	httpEvent.Response.Write(http.StatusOK, constants.DefaultContentType, fmt.Sprintf(core.ResponseFormat, "successed"))
 }

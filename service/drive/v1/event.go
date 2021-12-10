@@ -102,3 +102,19 @@ func (h *FileTrashedEventHandler) Handle(ctx *core.Context, event interface{}) e
 func SetFileTrashedEventHandler(conf *config.Config, fn func(ctx *core.Context, event *FileTrashedEvent) error) {
 	event.SetTypeHandler(conf, "drive.file.trashed_v1", &FileTrashedEventHandler{Fn: fn})
 }
+
+type FileEditEventHandler struct {
+	Fn func(*core.Context, *FileEditEvent) error
+}
+
+func (h *FileEditEventHandler) GetEvent() interface{} {
+	return &FileEditEvent{}
+}
+
+func (h *FileEditEventHandler) Handle(ctx *core.Context, event interface{}) error {
+	return h.Fn(ctx, event.(*FileEditEvent))
+}
+
+func SetFileEditEventHandler(conf *config.Config, fn func(ctx *core.Context, event *FileEditEvent) error) {
+	event.SetTypeHandler(conf, "drive.file.edit_v1", &FileEditEventHandler{Fn: fn})
+}

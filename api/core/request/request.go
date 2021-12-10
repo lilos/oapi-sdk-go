@@ -30,9 +30,11 @@ type Opt struct {
 	userAccessToken  string
 	tenantKey        string
 	isResponseStream bool
+	needHelpDeskAuth bool
 }
 
 type Info struct {
+	Domain                 string
 	HttpPath               string                       // request http path
 	HttpMethod             string                       // request http method
 	QueryParams            string                       // request query
@@ -47,6 +49,7 @@ type Info struct {
 	optFns                 []OptFn
 	IsResponseStream       bool
 	IsResponseStreamReal   bool
+	NeedHelpDeskAuth       bool
 }
 
 func (i *Info) WithContext(ctx *core.Context) {
@@ -91,6 +94,12 @@ func SetResponseStream() OptFn {
 	}
 }
 
+func NeedHelpDeskAuth() OptFn {
+	return func(opt *Opt) {
+		opt.needHelpDeskAuth = true
+	}
+}
+
 type Request struct {
 	*Info
 	HTTPRequest         *http.Request
@@ -103,7 +112,7 @@ type Request struct {
 }
 
 func (r *Request) String() string {
-	return fmt.Sprintf("%s %s %s", r.HttpMethod, r.url(), r.AccessTokenType)
+	return fmt.Sprintf("%s %s %s", r.HttpMethod, r.Url(), r.AccessTokenType)
 }
 
 func NewRequestByAuth(httpPath, httpMethod string, input, output interface{}) *Request {
@@ -154,13 +163,15 @@ func NewRequest(httpPath, httpMethod string, accessTokenTypes []AccessTokenType,
 	return req
 }
 
-func (r *Request) Init() error {
+func (r *Request) Init(domain string) error {
+	r.Domain = domain
 	opt := &Opt{}
 	for _, optFn := range r.optFns {
 		optFn(opt)
 	}
 	r.IsNotDataField = opt.isNotDataField
 	r.IsResponseStream = opt.isResponseStream
+	r.NeedHelpDeskAuth = opt.needHelpDeskAuth
 	if opt.tenantKey != "" {
 		if _, ok := r.AccessibleTokenTypeSet[AccessTokenTypeTenant]; ok {
 			r.AccessTokenType = AccessTokenTypeTenant
@@ -217,11 +228,15 @@ func resolvePath(path string, pathVar map[string]interface{}) (string, error) {
 			j = len(subPath)
 		}
 		varName := subPath[1:j]
-		v, ok := pathVar[varName]
-		if !ok {
-			return "", fmt.Errorf("path:%s, var name:%s not find value", path, varName)
+		if varName == "" {
+			newPath += fmt.Sprint(subPath[:j])
+		} else {
+			v, ok := pathVar[varName]
+			if !ok {
+				return "", fmt.Errorf("path:%s, var name:%s not find value", path, varName)
+			}
+			newPath += fmt.Sprint(v)
 		}
-		newPath += fmt.Sprint(v)
 		if j == len(subPath) {
 			break
 		}
@@ -230,8 +245,16 @@ func resolvePath(path string, pathVar map[string]interface{}) (string, error) {
 	return newPath, nil
 }
 
-func (r *Request) url() string {
-	path := fmt.Sprintf("/%s/%s", constants.OAPIRootPath, r.HttpPath)
+func (r *Request) Url() string {
+	path := r.HttpPath
+	if strings.Index(r.HttpPath, "http") != 0 {
+		if strings.Index(r.HttpPath, "/open-apis") == 0 {
+			path = fmt.Sprintf("%s%s", r.Domain, r.HttpPath)
+		} else {
+			path = fmt.Sprintf("%s/%s/%s", r.Domain, constants.OAPIRootPath, r.HttpPath)
+		}
+	}
+
 	if r.QueryParams != "" {
 		path = fmt.Sprintf("%s?%s", path, r.QueryParams)
 	}

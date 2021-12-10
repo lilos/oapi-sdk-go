@@ -3,9 +3,10 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/larksuite/oapi-sdk-go/api/core/constants"
-	"github.com/larksuite/oapi-sdk-go/api/core/errors"
+	coreerrors "github.com/larksuite/oapi-sdk-go/api/core/errors"
 	"github.com/larksuite/oapi-sdk-go/api/core/request"
 	"github.com/larksuite/oapi-sdk-go/api/core/response"
 	"github.com/larksuite/oapi-sdk-go/api/core/token"
@@ -13,7 +14,6 @@ import (
 	"github.com/larksuite/oapi-sdk-go/core"
 	"github.com/larksuite/oapi-sdk-go/core/config"
 	coreconst "github.com/larksuite/oapi-sdk-go/core/constants"
-	"github.com/larksuite/oapi-sdk-go/core/model"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
@@ -90,7 +90,7 @@ func (hs *Handlers) send(ctx *core.Context, req *request.Request) {
 		req.Err = err
 		return
 	}
-	ctx.Set(coreconst.HTTPHeader, model.NewOapiHeader(resp.Header))
+	ctx.Set(coreconst.HTTPHeader, core.NewOapiHeader(resp.Header))
 	ctx.Set(coreconst.HTTPKeyStatusCode, resp.StatusCode)
 	req.HTTPResponse = resp
 	defer hs.retry(ctx, req)
@@ -101,8 +101,9 @@ func (hs *Handlers) send(ctx *core.Context, req *request.Request) {
 	hs.unmarshalResponse(ctx, req)
 }
 
-func initFunc(_ *core.Context, req *request.Request) {
-	req.Err = req.Init()
+func initFunc(ctx *core.Context, req *request.Request) {
+	conf := config.ByCtx(ctx)
+	req.Err = req.Init(conf.GetDomain())
 }
 
 func validateFunc(ctx *core.Context, req *request.Request) {
@@ -110,17 +111,17 @@ func validateFunc(ctx *core.Context, req *request.Request) {
 		return
 	}
 	if _, ok := req.AccessibleTokenTypeSet[req.AccessTokenType]; !ok {
-		req.Err = errors.ErrAccessTokenTypeInvalid
+		req.Err = coreerrors.ErrAccessTokenTypeInvalid
 	}
 	if config.ByCtx(ctx).GetAppSettings().AppType == coreconst.AppTypeISV {
 		if req.AccessTokenType == request.AccessTokenTypeTenant && req.TenantKey == "" {
-			req.Err = errors.ErrTenantKeyIsEmpty
+			req.Err = coreerrors.ErrTenantKeyIsEmpty
 			return
 		}
-		if req.AccessTokenType == request.AccessTokenTypeUser && req.UserAccessToken == "" {
-			req.Err = errors.ErrUserAccessTokenKeyIsEmpty
-			return
-		}
+	}
+	if req.AccessTokenType == request.AccessTokenTypeUser && req.UserAccessToken == "" {
+		req.Err = coreerrors.ErrUserAccessTokenKeyIsEmpty
+		return
 	}
 }
 
@@ -136,6 +137,8 @@ func buildFunc(ctx *core.Context, req *request.Request) {
 				reqBodyFromInput(ctx, req)
 				conf.GetLogger().Debug(ctx, fmt.Sprintf("[build]request:%v, body:%s", req, string(req.RequestBody)))
 			}
+		} else {
+			conf.GetLogger().Debug(ctx, fmt.Sprintf("[build]request:%v", req))
 		}
 		if req.Err != nil {
 			return
@@ -149,7 +152,7 @@ func buildFunc(ctx *core.Context, req *request.Request) {
 			return
 		}
 	}
-	r, err := http.NewRequestWithContext(ctx, req.HttpMethod, req.FullUrl(conf.GetDomain()), req.RequestBodyStream)
+	r, err := http.NewRequestWithContext(ctx, req.HttpMethod, req.Url(), req.RequestBodyStream)
 	if err != nil {
 		req.Err = err
 		return
@@ -181,6 +184,14 @@ func signFunc(ctx *core.Context, req *request.Request) {
 	default:
 		httpRequest, err = req.HTTPRequest, req.Err
 	}
+	if req.NeedHelpDeskAuth {
+		conf := config.ByCtx(ctx)
+		if conf.GetHelpDeskAuthorization() == "" {
+			err = errors.New("help desk API, please set the helpdesk information of config.AppSettings")
+		} else if httpRequest != nil {
+			httpRequest.Header.Set("X-Lark-Helpdesk-Authorization", conf.GetHelpDeskAuthorization())
+		}
+	}
 	req.HTTPRequest = httpRequest
 	req.Err = err
 }
@@ -189,14 +200,17 @@ func validateResponseFunc(_ *core.Context, req *request.Request) {
 	resp := req.HTTPResponse
 	contentType := resp.Header.Get(coreconst.ContentType)
 	if req.IsResponseStream {
+		if resp.StatusCode == http.StatusOK {
+			req.IsResponseStreamReal = true
+			return
+		}
 		if strings.Contains(contentType, coreconst.ContentTypeJson) {
 			req.IsResponseStreamReal = false
 			return
 		}
 		if resp.StatusCode != http.StatusOK {
-			req.Err = fmt.Errorf("response is stream, but status code:%d", resp.StatusCode)
+			req.Err = fmt.Errorf("response is stream, but status code:%d, contentType:%s", resp.StatusCode, contentType)
 		}
-		req.IsResponseStreamReal = true
 		return
 	}
 	if !strings.Contains(contentType, coreconst.ContentTypeJson) {
@@ -205,8 +219,7 @@ func validateResponseFunc(_ *core.Context, req *request.Request) {
 			req.Err = err
 			return
 		}
-		req.Err = response.NewErrorOfInvalidResp(fmt.Sprintf("content-type: %s, is not: %s, if is stream, "+
-			"please `request.SetResponseStream() or xxxxReqCall.SetResponseStream(io.Writer)`, body:%s", contentType, coreconst.ContentTypeJson, string(respBody)))
+		req.Err = response.NewErrorOfInvalidResp(fmt.Sprintf("content-type: %s, is not: %s, body:%s", contentType, coreconst.ContentTypeJson, string(respBody)))
 	}
 }
 
@@ -268,7 +281,7 @@ func retryFunc(_ *core.Context, req *request.Request) {
 func complementFunc(ctx *core.Context, req *request.Request) {
 	if req.RequestBodyFilePath != "" {
 		if err := os.Remove(req.RequestBodyFilePath); err != nil {
-			config.ByCtx(ctx).GetLogger().Info(ctx, fmt.Sprintf("[complement] request:%v, "+
+			config.ByCtx(ctx).GetLogger().Debug(ctx, fmt.Sprintf("[complement] request:%v, "+
 				"delete tmp file(%s) err: %v", req, req.RequestBodyFilePath, err))
 		}
 	}
@@ -279,7 +292,7 @@ func complementFunc(ctx *core.Context, req *request.Request) {
 			applyAppTicket(ctx)
 		}
 	default:
-		if req.Err == errors.ErrAppTicketIsEmpty {
+		if req.Err == coreerrors.ErrAppTicketIsEmpty {
 			applyAppTicket(ctx)
 		}
 	}

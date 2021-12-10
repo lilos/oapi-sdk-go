@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/larksuite/oapi-sdk-go/core"
-	"github.com/larksuite/oapi-sdk-go/core/constants"
 	"github.com/larksuite/oapi-sdk-go/core/tools"
-	eventginserver "github.com/larksuite/oapi-sdk-go/event/http/gin"
+	eventhttp "github.com/larksuite/oapi-sdk-go/event/http"
 	"github.com/larksuite/oapi-sdk-go/sample/configs"
 	im "github.com/larksuite/oapi-sdk-go/service/im/v1"
 )
@@ -14,9 +13,9 @@ import (
 func main() {
 
 	// for redis store and logrus
-	// var conf = configs.TestConfigWithLogrusAndRedisStore(constants.DomainFeiShu)
+	// var conf = configs.TestConfigWithLogrusAndRedisStore(core.DomainFeiShu)
 	// var conf = configs.TestConfig("https://open.feishu.cn")
-	var conf = configs.TestConfig(constants.DomainFeiShu)
+	var conf = configs.TestConfig(core.DomainFeiShu)
 
 	im.SetMessageReceiveEventHandler(conf, func(ctx *core.Context, event *im.MessageReceiveEvent) error {
 		fmt.Println(ctx.GetRequestID())
@@ -25,7 +24,9 @@ func main() {
 	})
 
 	g := gin.Default()
-	eventginserver.Register("/webhook/event", conf, g)
+	g.POST("/webhook/event", func(context *gin.Context) {
+		eventhttp.Handle(conf, context.Request, context.Writer)
+	})
 	err := g.Run(":8089")
 	if err != nil {
 		fmt.Println(err)
